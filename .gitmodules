@@ -1,0 +1,3 @@
+[submodule "vendor/easy-rsa"]
+	path = vendor/easy-rsa
+	url = https://github.com/OpenVPN/easy-rsa.git

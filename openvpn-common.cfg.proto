@@ -1,0 +1,35 @@
+# Configuration options used by both the server and the client
+
+# The set of ciphers to use for the TLS connection; In this stup AES or DSS is
+# used and all ciphers support key exchange. You may need to update this when
+# working with older clients
+tls-cipher TLS-ECDHE-RSA-WITH-AES-256-GCM-SHA384:TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384:TLS-DHE-DSS-WITH-AES-256-GCM-SHA384:TLS-DHE-RSA-WITH-AES-256-GCM-SHA384:TLS-ECDH-RSA-WITH-AES-256-GCM-SHA384:TLS-ECDH-ECDSA-WITH-AES-256-GCM-SHA384
+
+# The symmetric cipher to use for network traffic. AES with 256bit key is used
+# for high security.
+# AES is also supported by many crypto engines
+cipher AES-256-CFB
+
+# Hash to use for HMAC authentication of packets
+auth SHA384
+
+# Drop Root permissions after start
+user nobody
+group nogroup
+
+# Use a hardware ctypto engine if possible
+engine
+
+# The name of the network device to create (needs to start with tun)
+dev tun-$VPN_NAME
+
+persist-key
+persist-tun
+
+# Write status and logging information
+status /run/openvpn-${VPN_NAME}.status
+log-append /var/log/openvpn-${VPN_NAME}.log
+writepid /run/openvpn-${VPN_NAME}.pid
+
+verb 3
+mute 6

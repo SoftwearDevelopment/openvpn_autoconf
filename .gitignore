@@ -1,0 +1,5 @@
+.*.sw*
+
+pki/
+openvpn-server.cfg
+openvpn-common.cfg

@@ -1,0 +1,246 @@
+#! /bin/bash
+set -e
+
+# Like echo, but prints to stderr
+# Args: @ - The text to print and echo like parameters
+er() {
+  echo >&2 "$@"
+}
+
+# Execute a command and print to stderr
+# Args: @ – The command to invoke
+evp() {
+  er "\$ $@"
+  "$@"
+}
+
+# Crash the script and print an error message
+#
+# Args: @ – Any text to print before failing
+fail() {
+  echo "Aborting $@"
+  exit 13
+}
+
+# Ask the user befo
+# Args: @ – Text describing we're doing that needs confirmation.
+confirm() {
+  local ans
+
+  er -n "$@ Continue? (Type YES) > "
+  test "$(head -n 1)" = "YES" || fail
+}
+
+# Takes text and expands all variables inside the string
+# https://stackoverflow.com/questions/10683349/forcing-bash-to-expand-variables-in-a-string-loaded-from-a-file
+# Stdin: The text to expand the variables in
+# Stdout: The result of the variable substitution
+expand_vars() {
+  local data="`cat`"
+  local delim="__apply_shell_expansion_delimiter__"
+  local cmd="cat <<$delim"$'\n'"$data"$'\n'"$delim"
+  eval "$cmd"
+}
+
+help() {
+  er "ADVANCED USAGE:
+  $script_file easyrsa ...
+      Directly invoke an easy RSA command.
+
+  $script_file easyrsa  help
+      Get help about how to use easyrsa
+
+  $script_file vpn_pki_setup
+      Set up the public key infrastructure on this VPN.
+
+  $script_file compile_openvpn
+      Download, compile and install a current OpenVPN version.
+
+  $script_file install_sysVinit
+      Install the system V init script.
+
+  $script_file update_server_cfg
+      Regenerate openvpn-server.cfg and openvpn-common.cfg from their .proto files.
+
+USAGE:
+  $script_file help
+      show this help
+
+  $script_file autoinstall
+      Try to automatically set up a VPN on this machine.
+      (You probably want to run this)
+
+  $script_file add_user <name>
+      Add a user to the VPN; will generate the necessary keys and print instructions on how the user needs to use them.
+"
+}
+
+easyrsa() {
+  SKELETON_DIR="$VPN_DIR" "${VPN_DIR}/vendor/easy-rsa/easyrsa3/easyrsa" --vars="${VPN_DIR}/easy-rsa.cfg" "$@"
+}
+
+vpn_pki_setup() {
+  test '!' -e "./pki" || confirm "./pki already exists. Overwrite?"
+
+  # Initialise the pki/ directory structure.
+  evp easyrsa --batch init-pki
+
+  # Generate our CA. The CA certificate will be used to sign the VPN server's
+  # certificate and any client certificate. Both the server and client's will
+  # know the server certificate and thus be able to check whether the other
+  # side's certificate is signed by the CA. That's how this system is secured.
+  # The CA key (.key) must be kept a secret, the CA certificate (.crt) is given
+  # to all clients;
+  # The common name of the CA will be generated from the VPN name.
+  EASYRSA_REQ_CN="CA for the $VPN_NAME VPN" easyrsa --batch build-ca nopass
+
+  # Generate a server certificate. This is what our VPN server will use to
+  # authenticate itself in front of clients.
+  # The (.key) file is completely secret.
+  evp easyrsa --batch build-server-full server nopass
+
+  # Diffie Hellman parameters; this is a bunch of prime numbers used for crypto
+  # stuff. DH key exchange is useful so a new key is computed for every connection.
+  # Even if our Server .key is stolen, attackers won't be able to decrypt past 
+  # connections.
+  # This takes a long time but greatly enhances security. It should be repeated
+  # every couple of moths or so.
+  # There is a standard set of 1024bit DH parameters, but attacks are known
+  # against that. We are using 4096bit custom parameters, so that should be
+  # much safer.
+  evp easyrsa --batch gen-dh
+
+  er "The crypto infrastructure has been set up.
+You can now use '$script_file add_user <name>' to provide users with access."
+}
+
+compile_openvpn() {
+  (
+    # Standard location for custom compiled stuff; the sources will stay in here
+    cd /usr/local/src/
+
+    # Download openVPN 2.3.8
+    evp wget "https://swupdate.openvpn.org/community/releases/openvpn-2.3.8.tar.xz"
+
+    # Check if the file downloaded is the same as the one
+    # when the script was created.
+    sha512sum <<< "d556f6ed0a69bd3e54e32cd1a640ada71adc5321b154b8853f9302736948eb246e3ee019e60dc802c5c54641f13d2a2680336def7e402f0f73b75139041884c1  openvpn-2.3.8.tar.xz" -c - || {
+      rm "openvpn-2.3.8.tar.xz"
+      fail "SHASum mismatch detected"
+    }
+
+    # Unpack the sources
+    evp tar -xf "openvpn-2.3.8.tar.xz"
+    cd openvpn-2.3.8/
+
+    # Prepare for compilation: Disabling pam and lzo here:
+    # LZO is not always available and there are attacks against compressed
+    # encrypred connections.
+    # Disabling libpam, because it's not always available.
+    evp ./configure --disable-lzo --disable-plugin-auth-pam
+
+    # Compile (on one CPU)
+    evp make
+
+    # Install to /usr/local/bin
+    evp make install
+  )
+}
+
+install_sysVinit() {
+  local service=openvpn-"$VPN_NAME"
+  local service_file=/etc/init.d/"$service"
+
+  # Install the service file and update it with the path to the
+  # VPN directory and a call to the configuration variables
+  awk < "$VPN_DIR"/sysv-service.proto > "$service_file" \
+    -v "VPN_DIR=${VPN_DIR}" -v "variables_file=${variables_file}" '
+    {
+      if ($0 == "<<<INSERT_VARIABLES_HERE>>>") {
+        QT="'\''";
+        print "VPN_DIR=" QT VPN_DIR QT;
+        print ". " QT variables_file QT;
+      } else {
+        print $0
+      }
+    }
+  '
+  evp chmod a+x "$service_file"
+  evp update-rc.d "$service" defaults
+
+  echo >&2 "Installed the OpenVPN service on your system and configured it to start on boot.
+I order to start it right now, use  '$service_file start'.
+You may also need to configure your firewall before openvpn can be used."
+}
+
+update_server_cfg() {
+    expand_vars < "$VPN_DIR"/openvpn-server.cfg.proto > "$VPN_DIR"/openvpn-server.cfg
+    expand_vars < "$VPN_DIR"/openvpn-common.cfg.proto > "$VPN_DIR"/openvpn-common.cfg
+}
+
+autoinstall() {
+  compile_openvpn
+  vpn_pki_setup
+  update_server_cfg
+  install_sysVinit
+
+  echo >&2 "OpenVPN should have been installed. Please: Start the vpn, update your VPN setting to allow connections to openvpn and create a user for yourself to test with."
+}
+
+add_user() {
+  name="$1"; shift || fail "USAGE: ${script_file} add_user <name>"
+
+  tmp_dir="/tmp/openvpn-client-setup-`uuidgen`"
+
+  client_vpn_dirname="${tmp_dir}/vpn_${VPN_NAME}_${name}"
+  client_vpn_tarname="${client_vpn_dirname}.tar"
+
+  key_easyrsa_file="${pki_dir}/private/${name}.key"
+  crt_easyrsa_file="${pki_dir}/issued/${name}.crt"
+
+  er "Setting up Spynl Testing VPN access for $name"
+
+  if test -f "${key_easyrsa_file}" && test -f "${crt_easyrsa_file}"; then
+    er "${key_easyrsa_file} and ${crt_easyrsa_file} already exist. Reusing those keys. Delete/backup them if you want to use new keys"
+  else
+    easyrsa build-client-full "$name" nopass
+  fi
+
+  test -f "${key_easyrsa_file}" && test -f "${crt_easyrsa_file}" ||
+      fail "${key_easyrsa_file} and ${crt_easyrsa_file} missing"
+
+  (
+    mkdir -p "$client_vpn_dirname"
+
+    expand_vars < "$VPN_DIR"/openvpn-client.cfg.proto > "$client_vpn_dirname"/openvpn-client.cfg
+    expand_vars < "$VPN_DIR"/openvpn-common.cfg.proto > "$client_vpn_dirname"/openvpn-common.cfg
+    cp "$key_easyrsa_file" "$client_vpn_dirname"/client.key
+    cp "$crt_easyrsa_file" "$client_vpn_dirname/client.crt"
+    cp "$pki_dir/ca.crt" "$client_vpn_dirname"
+
+    cd "`dirname "$client_vpn_dirname"`"
+    tar -cvf "$client_vpn_tarname" "`basename "$client_vpn_dirname"`"
+  )
+
+  er "
+The user's configuration has been created under ${client_vpn_tarname} .
+
+Please transmit the tar over a safe channel to it's user.
+
+In order to access the VPN the user must unpack the tar, make sure the 'nobody' group and user exists on their system and execute 'openvpn openvpn-client.cfg' inside the unpacked directory as root.
+
+Stay safe. Use crypto. Don´t drink and factorize."
+
+}
+
+script_file="$0"
+VPN_DIR="$(readlink -f "$(dirname "$script_file")")"
+pki_dir="${VPN_DIR}/pki"
+variables_file="$VPN_DIR/variables.cfg"
+
+# Load the settings
+. "${variables_file}"
+
+script_cmd="$1"; shift
+test -n "$script_cmd" || script_cmd="help"
+"$script_cmd" "$@"

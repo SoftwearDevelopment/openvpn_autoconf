@@ -1,0 +1,19 @@
+config openvpn-common.cfg
+
+# We are a client
+client
+
+# The server to connect to
+remote $SERVER_IP $SERVER_PORT $SERVER_TRANSPORT
+
+nobind
+
+tls-client
+
+ca   ca.crt
+cert client.crt
+key  client.key
+
+# Make sure the remote certificate is of type 'server'
+# (prevents other clients from using their certificates as server certificates)
+remote-cert-tls server
