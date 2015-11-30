@@ -71,8 +71,7 @@ USAGE:
       (You probably want to run this)
 
   $script_file add_user <name>
-      Add a user to the VPN; will generate the necessary keys and print instructions on how the user needs to use them.
-"
+      Add a user to the VPN; will generate the necessary keys and print instructions on how the user needs to use them."
 }
 
 easyrsa() {
@@ -247,6 +246,6 @@ variables_file="$VPN_DIR/variables.cfg"
 # Load the settings
 . "${variables_file}"
 
-script_cmd="$1"; shift
+script_cmd="$1" && shift || true
 test -n "$script_cmd" || script_cmd="help"
 "$script_cmd" "$@"
