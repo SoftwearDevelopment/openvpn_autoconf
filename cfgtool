@@ -179,7 +179,13 @@ update_server_cfg() {
 }
 
 autoinstall() {
-  compile_openvpn
+  if which openvpn 2>/dev/null >/dev/null; then
+    confirm "Found openvpn installed on the system, will use that one. This is not supported"
+  else
+    er "No openvpn detected. Automatically downloading and installing it in /usr/local"
+    compile_openvpn
+  fi
+
   vpn_pki_setup
   update_server_cfg
   install_sysVinit
