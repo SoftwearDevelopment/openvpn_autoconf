@@ -8,6 +8,8 @@
 # Description: Openvpn Service.
 ### END INIT INFO
 
+set -e
+
 # The .proto files can contain variables; they are applies
 # by simply expanding those variables.
 # Of course, this is a shell script, so expanding all the
@@ -29,6 +31,10 @@ is_running() {
 }
 
 _cmd_start() {
+  if test -n "$ENABLE_IP_ROUTING"; then
+    sysctl net.ipv4.ip_forward=1
+  fi
+
   if is_running; then
     echo >&2 "Openvpn is already running"
   else
