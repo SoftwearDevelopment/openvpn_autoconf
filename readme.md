@@ -89,6 +89,30 @@ it's own automatically.
 6. Generate configurations for any other users.
 7. Drink a beer and watch steven universe or something.
 
+Note that changing the configuration after running
+autoinstall is a bit dangerous, since service files or
+configurations need updating.
+It can be done easily, but you have to know what you are doing
+and possibly update installed files. Read the source.
+
+### Multiple vpns with openvpn_autoconf
+
+In general, it should be unproblematic to run multiple VPNs.
+Just use different names, ports and so on…
+You may also want to set USE_SYSTEM_OPENVPN=y to true, or
+just script the dialogue complaining about a pre installed
+openvpn.
+
+### Uninstall
+
+* Remove the openvpn_autoconf folder
+* Remove the service file from /etc/init.d
+* Remove the openvpn installation
+  * In `/usr/local/src/openvpn*/` run `make uninstall`
+  * Remove the source folder and tar file from /usr/local/src
+* Remove PID file and status file from /run
+* Remove logs from /var/log
+
 ## Cryptographic considerations
 
 ### Assumptions, without whom the entire VPN would be insecure.
@@ -168,6 +192,9 @@ OpenVPN, this script, openssl, gnutls and openssh.
 * Systemd support
 * Better support for managing the keys externally
 * Support for using encrypted (password protected) keys
+* Detect that the platform's/installed openvpn is current
+  and don't complain.
+* Allow using preexisting pki/ directories
 
 # LICENSE
 
