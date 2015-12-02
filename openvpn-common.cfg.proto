@@ -28,7 +28,6 @@ persist-tun
 
 # Write status and logging information
 status /run/openvpn-${VPN_NAME}.status
-log-append /var/log/openvpn-${VPN_NAME}.log
 writepid /run/openvpn-${VPN_NAME}.pid
 
 verb 3

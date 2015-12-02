@@ -35,3 +35,5 @@ dh   dh.pem
 
 # Make sure the remote certificate is of type 'client'
 remote-cert-tls client
+
+log-append /var/log/openvpn-${VPN_NAME}.log
