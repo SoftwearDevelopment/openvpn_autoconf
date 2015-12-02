@@ -27,8 +27,8 @@ persist-key
 persist-tun
 
 # Write status and logging information
-status /run/openvpn-${VPN_NAME}.status
-writepid /run/openvpn-${VPN_NAME}.pid
+status $STATUS_FILE
+writepid $PID_FILE
 
 verb 3
 mute 6
