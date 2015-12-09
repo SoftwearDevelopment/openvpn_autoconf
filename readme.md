@@ -4,6 +4,9 @@ A set of scripts for automatic administration of VPN
 servers. Generates keys and crypto parameters for you,
 installs openvpn and generates configurations for users.
 
+I've heard rumors that the client configs also work on
+windows ten. Rumors. Strange ones.
+
 ## Intended audience
 
 People already familiar with Openvpn who want to automate or
