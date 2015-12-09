@@ -105,12 +105,12 @@ openvpn.
 
 ### Uninstall
 
-* Remove the openvpn_autoconf folder
 * Remove the service file from /etc/init.d
 * Remove the openvpn installation
   * In `/usr/local/src/openvpn*/` run `make uninstall`
   * Remove the source folder and tar file from /usr/local/src
 * Remove logs from /var/log
+* Remove the openvpn_autoconf folder
 
 ## Cryptographic considerations
 
