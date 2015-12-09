@@ -114,6 +114,26 @@ openvpn.
 
 ## Cryptographic considerations
 
+Basically, the script automatically creates a Certificate
+Authority, and a server certificate which is signed with the
+CA certificate.
+When a client is configured, a certificate is generated for
+them and as signed with the CA certificate.
+
+When a connection is initiated, both the server and the
+client get each others public certificate and they know the
+CA certificate, so they can cryptographically check weather
+each other's certificate have been signed by the CA.
+
+If each verified the other, the connection succeeds, if they
+can not be verified, the server or the client will abort and
+print a certificate error.
+
+Nobody, except the VPN admins (or other users on the VPN)
+machine can get access the  CA private key.
+Since the CA private key needs to be available and only
+resides on the VPN server itself, this is a secure system.
+
 ### Assumptions, without whom the entire VPN would be insecure.
 
 All of the private keys (that is CA, server and client keys)
