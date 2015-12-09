@@ -110,7 +110,6 @@ openvpn.
 * Remove the openvpn installation
   * In `/usr/local/src/openvpn*/` run `make uninstall`
   * Remove the source folder and tar file from /usr/local/src
-* Remove PID file and status file from /run
 * Remove logs from /var/log
 
 ## Cryptographic considerations
