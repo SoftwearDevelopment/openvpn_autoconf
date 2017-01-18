@@ -192,56 +192,106 @@ autoinstall() {
   echo >&2 "OpenVPN should have been installed. Please: Start the vpn, update your VPN setting to allow connections to openvpn and create a user for yourself to test with."
 }
 
+#Adds a user to the vpn and generates a key for the user
+#It will also create a temp directory for the user in which the key and other information is placed
 add_user() {
-  name="$1"; shift || fail "USAGE: ${script_file} add_user <name>"
+  #User for which the ca will be signed
+  local name="$1"; shift || fail "USAGE: ${script_file} add_user <name> <password>"
+  local password="$1"; shift || fail "USAGE: ${script_file} add_user <name> <password>"
+  local client_vpn_dirname="${tmp_dir}/vpn_${VPN_NAME}_${name}"
+  local client_vpn_zipname="vpn_${VPN_NAME}_${name}.zip"
 
-  tmp_dir="/tmp/openvpn-client-setup-`uuidgen`"
+  #crt and key file names
+  local key_easyrsa_file="${pki_dir}/private/${name}.key"
+  local crt_easyrsa_file="${pki_dir}/issued/${name}.crt"
 
-  client_vpn_dirname="${tmp_dir}/vpn_${VPN_NAME}_${name}"
-  client_vpn_tarname="${client_vpn_dirname}.tar"
+  er "Setting up ${VPN_NAME} Testing VPN access for ${name}"
 
-  key_easyrsa_file="${pki_dir}/private/${name}.key"
-  crt_easyrsa_file="${pki_dir}/issued/${name}.crt"
-
-  er "Setting up Spynl Testing VPN access for $name"
-
+  #check if the user already exists else build a client with easyrsa and the given name
   if test -f "${key_easyrsa_file}" && test -f "${crt_easyrsa_file}"; then
     er "${key_easyrsa_file} and ${crt_easyrsa_file} already exist. Reusing those keys. Delete/backup them if you want to use new keys"
   else
-    easyrsa build-client-full "$name" nopass
+    easyrsa build-client-full "${name}" nopass
   fi
 
+  #Check if the ca and key are generated
   test -f "${key_easyrsa_file}" && test -f "${crt_easyrsa_file}" ||
       fail "${key_easyrsa_file} and ${crt_easyrsa_file} missing"
 
   (
-    mkdir -p "$client_vpn_dirname"
-
-    expand_vars < "$VPN_DIR"/openvpn-client.cfg.proto > "$client_vpn_dirname"/openvpn-client.cfg
-    expand_vars < "$VPN_DIR"/openvpn-common.cfg.proto > "$client_vpn_dirname"/openvpn-common.cfg
-    cp "$key_easyrsa_file" "$client_vpn_dirname"/client.key
-    cp "$crt_easyrsa_file" "$client_vpn_dirname/client.crt"
-    cp "$pki_dir/ca.crt" "$client_vpn_dirname"
-
-    cd "`dirname "$client_vpn_dirname"`"
-    tar -cvf "$client_vpn_tarname" "`basename "$client_vpn_dirname"`"
+    #Create the client config directory
+    mkdir -p "${client_vpn_dirname}"
+    #Place the files in the temp directory and the client config directory
+    expand_vars < "${VPN_DIR}/openvpn-client.cfg.proto" > "${client_vpn_dirname}/openvpn-client.cfg"
+    expand_vars < "${VPN_DIR}/openvpn-common.cfg.proto" > "${client_vpn_dirname}/openvpn-common.cfg"
+    cp "${key_easyrsa_file}" "${client_vpn_dirname}/client.key"
+    cp "${crt_easyrsa_file}" "${client_vpn_dirname}/client.crt"
+    cp "${pki_dir}/ca.crt" "${client_vpn_dirname}"
   )
-
+  echo "a ${client_vpn_dirname}" "${client_vpn_dirname}/${client_vpn_zipname}" -p"${password}"
+  cd "${tmp_dir}"
+  7z a "${client_vpn_zipname}" "${client_vpn_dirname}" -p"${password}"
+  cd "${working_dir}"
   er "
-The user's configuration has been created under ${client_vpn_tarname} .
+The user's configuration has been created under ${client_vpn_zipname}.
 
-Please transmit the tar over a safe channel to it's user.
+And encrypted with the generated password.
+
+Please transmit the zip over a safe channel to it's user.
 
 In order to access the VPN the user must unpack the tar, make sure the 'nobody' group and user exists on their system and execute 'openvpn openvpn-client.cfg' inside the unpacked directory as root.
 
 Stay safe. Use crypto. Don´t drink and factorize."
 
+
 }
 
-script_file="$0"
+
+#http://blog.pragbits.com/it/2015/02/09/slack-notifications-via-curl/
+__notify_slack() {
+    local SLACK_TITLE="$1"
+    local SLACK_BODY="$2"
+    local payload=$(python -c "import sys;import json;print(json.dumps({'attachments':[{'text': sys.argv[1], 'textfallback': sys.argv[1], 'color':'#00ff00', 'fields': [{'title': sys.argv[2], 'short':False}]}]}))" "${SLACK_TITLE}" "${SLACK_BODY}")
+    local SLACK_URL="https://hooks.slack.com/services/${SLACK_API}"
+    curl -X POST --data "payload=${payload}" ${SLACK_URL}
+ }
+
+#Load a textfile filled with the emails of the new users
+add_clients() {
+  #Filename of the textfile with clients
+  local file_name="$1"; shift || fail "USAGE: ${script_file} load_clients <filename>"
+  #Read the text file line by line and add to array
+  local date=`date +%Y-%m-%d:%H:%M:%S`
+  #Rebuild the ca
+  yes YES | vpn_pki_setup
+
+  #generate new keys and zip them
+  cat "${file_name}" | while read client;do
+    local email="$(echo $client | awk '{ print $1 }')"
+    local name="$(echo $client | awk -F @ '{ print $1 }')"
+    local password="$(echo $client | awk '{print $2}')"
+    add_user "${name}" "${password}"
+    local zip_name="vpn_${VPN_NAME}_${name}.zip"
+    echo "We have generated new keys for our vpn config
+The attached zipfile contains the vpn config
+Use the password given by your system administrator
+To open the zipfile
+    "|mail -s "key renewal - ${date}" -a "${zip_name}" "${email}"
+  done
+
+  #Notify slack that the keys have been updated
+  __notify_slack "NEW KEYS" "Keys have been updated at ${date} please check your email"
+
+  #clean up unused files
+  rm -rf "${tmp_dir}"
+}
+
+script_file="${0}"
+working_dir="$(pwd)"
+tmp_dir="/tmp/vpn_config-`uuid`"
 VPN_DIR="$(readlink -f "$(dirname "$script_file")")"
 pki_dir="${VPN_DIR}/pki"
-variables_file="$VPN_DIR/variables.cfg"
+variables_file="${VPN_DIR}/variables.cfg"
 
 # Load the settings
 . "${variables_file}"
