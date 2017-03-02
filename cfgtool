@@ -198,8 +198,8 @@ add_user() {
   #User for which the ca will be signed
   local name="$1"; shift || fail "USAGE: ${script_file} add_user <name> <password>"
   local password="$1"; shift || fail "USAGE: ${script_file} add_user <name> <password>"
-  local client_vpn_dirname="${tmp_dir}/vpn_${VPN_NAME}_${name}"
-  local client_vpn_zipname="vpn_${VPN_NAME}_${name}.zip"
+  local client_vpn_dirname="$1"; shift || client_vpn_dirname="${tmp_dir}/vpn_${VPN_NAME}_${name}"
+  local client_vpn_zipname="${client_vpn_dirname}.7z"
 
   #crt and key file names
   local key_easyrsa_file="${pki_dir}/private/${name}.key"
@@ -228,10 +228,11 @@ add_user() {
     cp "${crt_easyrsa_file}" "${client_vpn_dirname}/client.crt"
     cp "${pki_dir}/ca.crt" "${client_vpn_dirname}"
   )
-  echo "a ${client_vpn_dirname}" "${client_vpn_dirname}/${client_vpn_zipname}" -p"${password}"
-  cd "${tmp_dir}"
-  7z a "${client_vpn_zipname}" "${client_vpn_dirname}" -p"${password}"
-  cd "${working_dir}"
+
+  ( 
+    cd "$(dirname "${client_vpn_zipname}")"
+    7z a "${client_vpn_zipname}" "${client_vpn_dirname}" -p"${password}"
+  )
   er "
 The user's configuration has been created under ${client_vpn_zipname}.
 
@@ -247,19 +248,18 @@ Stay safe. Use crypto. Don´t drink and factorize."
 }
 
 
-#http://blog.pragbits.com/it/2015/02/09/slack-notifications-via-curl/
+# http://blog.pragbits.com/it/2015/02/09/slack-notifications-via-curl/
 __notify_slack() {
     local SLACK_TITLE="$1"
     local SLACK_BODY="$2"
-    local payload=$(python -c "import sys;import json;print(json.dumps({'attachments':[{'text': sys.argv[1], 'textfallback': sys.argv[1], 'color':'#00ff00', 'fields': [{'title': sys.argv[2], 'short':False}]}]}))" "${SLACK_TITLE}" "${SLACK_BODY}")
-    local SLACK_URL="https://hooks.slack.com/services/${SLACK_API}"
-    curl -X POST --data "payload=${payload}" ${SLACK_URL}
+    local payload=$(python -c "import sys; import json; print(json.dumps({'attachments':[{'text': sys.argv[1], 'textfallback': sys.argv[1], 'color':'#00ff00', 'fields': [{'title': sys.argv[2], 'short':False}]}]}))" "${SLACK_TITLE}" "${SLACK_BODY}")
+    curl -X POST --data "payload=${payload}" "$(cat "${VPN_DIR}/slack_url.txt")"
  }
 
 #Load a textfile filled with the emails of the new users
 add_clients() {
   #Filename of the textfile with clients
-  local file_name="$1"; shift || fail "USAGE: ${script_file} load_clients <filename>"
+  local file_name="$1"; shift || file_name="${VPN_DIR}/clients.txt"
   #Read the text file line by line and add to array
   local date=`date +%Y-%m-%d:%H:%M:%S`
   #Rebuild the ca
@@ -268,27 +268,29 @@ add_clients() {
   #generate new keys and zip them
   cat "${file_name}" | while read client;do
     local email="$(echo $client | awk '{ print $1 }')"
-    local name="$(echo $client | awk -F @ '{ print $1 }')"
     local password="$(echo $client | awk '{print $2}')"
-    add_user "${name}" "${password}"
-    local zip_name="vpn_${VPN_NAME}_${name}.zip"
-    echo "We have generated new keys for our vpn config
-The attached zipfile contains the vpn config
-Use the password given by your system administrator
-To open the zipfile
-    "|mail -s "key renewal - ${date}" -a "${zip_name}" "${email}"
+    local dir_name="/tmp/vpn_${VPN_NAME}_${email}"
+    local zip_name="${dir_name}.7z"
+
+    add_user "${email}" "${password}" "${dir_name}"
+
+    echo "${mail_message}" | mail -s "${VPN_NAME} New Key!" -a "${zip_name}" "${email}"
   done
 
-  #Notify slack that the keys have been updated
+  # Notify slack that the keys have been updated
   __notify_slack "NEW KEYS" "Keys have been updated at ${date} please check your email"
 
   #clean up unused files
   rm -rf "${tmp_dir}"
 }
 
+mail_message="We have generated new keys for our vpn config.
+The attached zipfile contains the vpn config.
+Use the password you where given to unpack the zip"
+
 script_file="${0}"
 working_dir="$(pwd)"
-tmp_dir="/tmp/vpn_config-`uuid`"
+tmp_dir="/tmp/vpn_config-`uuidgen`"
 VPN_DIR="$(readlink -f "$(dirname "$script_file")")"
 pki_dir="${VPN_DIR}/pki"
 variables_file="${VPN_DIR}/variables.cfg"
