@@ -86,8 +86,9 @@ it's own automatically.
    a while)
 4. Start the vpn; The command for this should have been
    printed by autoinstall.
-5. Run `cfgtool add_user <name>` for yourself. This should
-   generate a tar file and instructions how to use it.
+5. Run `sudo ./cfgtool add_user <name>` for yourself. This should
+   generate a tar file and instructions how to use it. Note: If you want to add
+   multiple users read further.
    Use the tar file and check if the VPN works.
 6. Generate configurations for any other users.
 7. Drink a beer and watch steven universe or something.
@@ -97,6 +98,43 @@ autoinstall is a bit dangerous, since service files or
 configurations need updating.
 It can be done easily, but you have to know what you are doing
 and possibly update installed files. Read the source.
+
+### Adding Multiple Users
+
+To add multiple users to openvpn at once, use the following commands with a text file.
+If you wish to send notifications via Slack, then create a slack_url.txt in the root of the OpenVPN
+directory with a hook URL to the channel where the messages should be posted.
+Example URL: https://hooks.slack.com/services/xxxxxxx/xxxxxxx/xxxxxxxxxxxxxx
+
+Note: If you wish to add new clients, read further because you will need to rekey the server.
+
+The clients.txt file should be in the format of user email and password to open the key archive which is created.
+Example of file content:
+
+```
+johndoe@email.com my-secure-password
+janedoe@email.com super-secure-password
+```
+
+Once the file is created run the following command to add all the new users.
+
+`sudo ./cfgtool add_clients clients.txt`
+
+### Add New Users to Existing VPN
+
+To add new users to an existing VPN, a new PKI key will need to be generated. First, delete the ./pki directory and then
+run the following commands to recreate the pki and a Diffie Hellman pem file. Important: If you have the VPN setup in a service, be sure to restart the VPN service after these steps have been completed.
+
+```
+sudo rm -rf ./pki
+sudo ./cfgtool vpn_pki_setup
+cd pki
+sudo openssl dhparam -out dh.pem 4096
+cd ..
+sudo ./cfgtool add_clients clients.txt
+```
+
+
 
 ### Multiple vpns with openvpn_autoconf
 
