@@ -79,19 +79,25 @@ it's own automatically.
    specifically variables.cfg
 2. Add any routes to openvpn-server.cfg.proto (look for the
    push instruction)
-3. Run `cfgtool autoinstall`; this should add an init.d
+3. If you wish to send notifications via Slack, then create a `slack_url.txt` in the root of the OpenVPN
+   directory with a hook URL to the channel where the messages should be posted.
+   Example URL: https://hooks.slack.com/services/xxxxxxx/xxxxxxx/xxxxxxxxxxxxxx
+   This tool will upload keys to an AWS S3 bucket. Create a file called `s3_bucket.txt` in the root of the
+   VPN directory with the bucket name. Note: Follow AWS best practices for making sure this bucket is secure and
+  only available to your team members
+4. Run `cfgtool autoinstall`; this should add an init.d
    script, generate openvpn-server.cfg and openvpn-common.cfg,
    download and compile openvpn and generate keys for the
    server, the ca and dh parameters (which will take quite
    a while)
-4. Start the vpn; The command for this should have been
+5. Start the vpn; The command for this should have been
    printed by autoinstall.
-5. Run `sudo ./cfgtool add_user <name>` for yourself. This should
+6. Run `sudo ./cfgtool add_user <name>` for yourself. This should
    generate a tar file and instructions how to use it. Note: If you want to add
    multiple users read further.
    Use the tar file and check if the VPN works.
-6. Generate configurations for any other users.
-7. Drink a beer and watch steven universe or something.
+7. Generate configurations for any other users.
+8. Drink a beer and watch steven universe or something.
 
 Note that changing the configuration after running
 autoinstall is a bit dangerous, since service files or

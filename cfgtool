@@ -100,7 +100,7 @@ vpn_pki_setup() {
 
   # Diffie Hellman parameters; this is a bunch of prime numbers used for crypto
   # stuff. DH key exchange is useful so a new key is computed for every connection.
-  # Even if our Server .key is stolen, attackers won't be able to decrypt past 
+  # Even if our Server .key is stolen, attackers won't be able to decrypt past
   # connections.
   # This takes a long time but greatly enhances security. It should be repeated
   # every couple of moths or so.
@@ -229,7 +229,7 @@ add_user() {
     cp "${pki_dir}/ca.crt" "${client_vpn_dirname}"
   )
 
-  ( 
+  (
     cd "$(dirname "${client_vpn_zipname}")"
     7z a "${client_vpn_zipname}" "${client_vpn_dirname}" -p"${password}"
   )
@@ -252,7 +252,7 @@ Stay safe. Use crypto. Don´t drink and factorize."
 __notify_slack() {
     local SLACK_TITLE="$1"
     local SLACK_BODY="$2"
-    local payload=$(python -c "import sys; import json; print(json.dumps({'attachments':[{'text': sys.argv[1], 'textfallback': sys.argv[1], 'color':'#00ff00', 'fields': [{'title': sys.argv[2], 'short':False}]}]}))" "${SLACK_TITLE}" "${SLACK_BODY}")
+    local payload=$(python3 -c "import sys; import json; print(json.dumps({'attachments':[{'text': sys.argv[1], 'textfallback': sys.argv[1], 'color':'#00ff00', 'fields': [{'title': sys.argv[2], 'short':False}]}]}))" "${SLACK_TITLE}" "${SLACK_BODY}")
     curl -X POST --data "payload=${payload}" "$(cat "${VPN_DIR}/slack_url.txt")"
  }
 
@@ -262,6 +262,8 @@ add_clients() {
   local file_name="$1"; shift || file_name="${VPN_DIR}/clients.txt"
   #Read the text file line by line and add to array
   local date=`date +%Y-%m-%d:%H:%M:%S`
+  #Get the S3 bucket
+  local s3_bucket=$(cat "${VPN_DIR}/s3_bucket.txt")
   #Rebuild the ca
   yes YES | vpn_pki_setup
 
@@ -272,21 +274,18 @@ add_clients() {
     local dir_name="/tmp/vpn_${VPN_NAME}_${email}"
     local zip_name="${dir_name}.7z"
 
+
     add_user "${email}" "${password}" "${dir_name}"
 
-    echo "${mail_message}" | mail -s "${VPN_NAME} New Key!" -a "${zip_name}" "${email}"
+    aws s3 cp "${zip_name}" s3://"${s3_bucket}"
   done
 
   # Notify slack that the keys have been updated
-  __notify_slack "NEW KEYS" "Keys have been updated at ${date} please check your email"
+  __notify_slack "NEW VPN KEYS" "Keys have been updated at ${date} please check the S3 bucket ${s3_bucket}. You will need proper AWS access to download the keys from this bucket as the bucket is not public."
 
   #clean up unused files
   rm -rf "${tmp_dir}"
 }
-
-mail_message="We have generated new keys for our vpn config.
-The attached zipfile contains the vpn config.
-Use the password you where given to unpack the zip"
 
 script_file="${0}"
 working_dir="$(pwd)"
